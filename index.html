@@ -47,8 +47,6 @@ button[disabled]{background:#999;cursor:not-allowed}
   <div id="options-area"></div>
   <button id="prev-btn" style="display:none;background:#5e35b1">上一题</button>
   <button id="action-btn" disabled>提交</button>
-  <button id="explain-btn" style="display:none;background:#00897b">生成解析</button>
-  <pre id="explain-box" style="white-space:pre-wrap;background:#f3f3f3;padding:10px;border-radius:6px;"></pre>
   <p id="feedback" class="feedback"></p>
 </div>
 
@@ -156,66 +154,54 @@ function renderFav(){favList.innerHTML='';if(!favorites.length){favList.textCont
 jumpBtn.onclick=()=>{renderJump();jumpModal.style.display='block';};
 function renderJump(){jumpGrid.innerHTML='';quiz.forEach((_,i)=>{const b=document.createElement('button');b.textContent=i+1;if(gradedStatus[i])b.classList.add('done');if(i===current)b.classList.add('current');b.onclick=()=>{current=i;renderQuestion();closeModal('jump-modal');};jumpGrid.appendChild(b);});}
 function closeModal(id){$(id).style.display='none';}
-
-// ===== DeepSeek Explain integration =====
-const explainBtn = document.getElementById('explain-btn');
-const explainBox = document.getElementById('explain-box');
-
-async function askDeepSeek(prompt){
-  const resp = await fetch('/api/explain', {
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({prompt})
-  });
-  const data = await resp.json();
-  return data.explanation || '解析失败';
-}
-
-function showExplain(){
-  if(explainBtn) explainBtn.style.display='inline-block';
-  if(explainBox) explainBox.textContent='';
-}
-
-function hideExplain(){
-  if(explainBtn) explainBtn.style.display='none';
-  if(explainBox) explainBox.textContent='';
-}
-
-if(explainBtn){
-  explainBtn.addEventListener('click', async ()=>{
-    const qTextContent = qText.innerText;
-    const opts = Array.from(optsArea.querySelectorAll('label')).map(l=>l.innerText).join('
-');
-    const myAns = (userChoices[current]||[]).join(',');
-    const prompt = `题目：${qTextContent}
-选项：
-${opts}
-我选择的答案：${myAns}
-请给出正确答案并简要解析（200字内）。`;
-    explainBox.textContent='⏳ 解析中...';
-    try{
-       explainBox.textContent = await askDeepSeek(prompt);
-    }catch(err){
-       explainBox.textContent = '解析失败：'+err;
-    }
-  });
-}
-
-// override/extend existing functions
-const _origSubmit = submit;
-function submitWrapper(){
-  _origSubmit();
-  if(gradedStatus[current]) showExplain();
-}
-submit = submitWrapper;
-
-const _origRenderQuestion = renderQuestion;
-function renderWrapper(){
-  hideExplain();
-  _origRenderQuestion();
-}
-renderQuestion = renderWrapper;
-
 </script>
+
+<!-- DeepSeek Explain Button & Logic -->
+<button id="explainBtn" style="display:none;background:#00897b;color:#fff;padding:6px 14px;border:none;border-radius:4px;margin-top:10px;">生成解析</button>
+<pre id="deepseekExplain" style="white-space:pre-wrap;margin-top:8px;background:#f4f4f4;padding:10px;border-radius:6px;"></pre>
+
+<script>
+// hook after grading: assume original script triggers a custom event 'quiz-graded'
+document.addEventListener('quiz-graded', () => {
+  document.getElementById('explainBtn').style.display = 'inline-block';
+  document.getElementById('deepseekExplain').textContent = '';
+});
+
+// fallback: if no custom event, show button after clicking main submit button
+setTimeout(()=> {
+  const mainBtn = document.getElementById('action-btn');
+  if(mainBtn){
+    mainBtn.addEventListener('click', () => {
+      // wait a tick for grading status
+      setTimeout(()=>{ 
+        document.getElementById('explainBtn').style.display = 'inline-block';
+        document.getElementById('deepseekExplain').textContent = '';
+      },500);
+    });
+  }
+},1000);
+
+// explainBtn logic
+const explainBtn = document.getElementById('explainBtn');
+explainBtn?.addEventListener('click', async ()=> {
+  const qText = document.getElementById('question-text')?.innerText || '';
+  const opts = Array.from(document.querySelectorAll('#options-area label')).map(l=>l.innerText).join('\n');
+  const myAns = (window.userChoices && window.userChoices[window.current]) ? window.userChoices[window.current].join(',') : '';
+  const prompt = `题目：${qText}\n选项：\n${opts}\n我选择的答案：${myAns}\n请给出正确答案并简要解析（200字内）。`;
+
+  const box = document.getElementById('deepseekExplain');
+  box.textContent = '⏳ 正在生成解析...';
+
+  try{
+    const res = await fetch('/api/explain',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
+    const data = await res.json();
+    box.textContent = data.explanation || '解析失败';
+  }catch(e){
+    box.textContent = '调用失败，请稍后重试';
+  }
+});
+</script>
+<!-- End DeepSeek -->
+
 </body>
 </html>
