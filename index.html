@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<title>Quick Quiz Builder V8</title>
+<title>Quick Quiz Builder V8 + DeepSeek</title>
 <style>
 body{font-family:Arial,Helvetica,sans-serif;max-width:900px;margin:0 auto;padding:24px;background:#f7f7f7}
 h1{margin-bottom:12px}
@@ -24,10 +24,11 @@ button[disabled]{background:#999;cursor:not-allowed}
 .jump-grid button{width:42px;border-radius:4px;padding:6px 0;background:#607d8b}
 .jump-grid button.done{background:#90caf9;color:#000}
 .jump-grid button.current{border:2px solid #ffeb3b}
+#explainBtn{background:#00897b}
 </style>
 </head>
 <body>
-<h1>Quick Quiz Builder V8</h1>
+<h1>Quick Quiz Builder V8 + DeepSeek</h1>
 <p>粘贴题库，数字 <strong>1–8</strong> 快速选项，<strong>Enter</strong> 提交/下一题。</p>
 
 <textarea id="raw-input" placeholder="把题库粘贴到这里…"></textarea><br>
@@ -43,28 +44,27 @@ button[disabled]{background:#999;cursor:not-allowed}
     <button id="fav-btn" class="top-icon" title="收藏/取消收藏">★</button>
   </div>
   <div id="q-num"></div>
-  <p id="question-text"></p>
+  <p id="question-text" class="question-text"></p>
   <div id="options-area"></div>
   <button id="prev-btn" style="display:none;background:#5e35b1">上一题</button>
   <button id="action-btn" disabled>提交</button>
+  <button id="explainBtn" style="display:none;">生成解析</button>
+  <pre id="explainBox"></pre>
   <p id="feedback" class="feedback"></p>
 </div>
 
-<!-- 收藏管理 -->
 <div id="fav-manager" class="modal">
   <h2>收藏夹</h2>
   <div id="fav-list"></div>
   <button onclick="closeModal('fav-manager')">关闭</button>
 </div>
 
-<!-- 跳题 -->
 <div id="jump-modal" class="modal">
   <h2>跳转到题号</h2>
   <div id="jump-grid" class="jump-grid"></div>
   <button onclick="closeModal('jump-modal')">关闭</button>
 </div>
 
-<!-- 题库管理 -->
 <div id="bank-modal" class="modal">
   <h2>已保存题库</h2>
   <div id="bank-list"></div>
@@ -84,6 +84,8 @@ const actionBtn=$('action-btn'), prevBtn=$('prev-btn'), feedback=$('feedback'), 
 const favManager=$('fav-manager'), favList=$('fav-list');
 const jumpModal=$('jump-modal'), jumpGrid=$('jump-grid');
 const bankModal=$('bank-modal'), bankList=$('bank-list');
+const explainBtn = document.getElementById('explainBtn');
+const explainBox = document.getElementById('explainBox');
 
 // data
 let quiz=[],current=0,userChoices=[],gradedStatus=[];
@@ -111,24 +113,42 @@ function toggleFav(q){const idx=favorites.findIndex(f=>f.question===q.question);
 
 function renderQuestion(){
   const q=quiz[current];qNum.textContent=`题目 ${current+1}/${quiz.length}`;qText.textContent=q.question;
-  optsArea.innerHTML='';feedback.textContent='';
+  optsArea.innerHTML='';feedback.textContent='';explainBox.textContent='';explainBtn.style.display='none'; // Reset explanation
   const wasGraded=gradedStatus[current];actionBtn.textContent=wasGraded?'下一题':'提交';actionBtn.disabled=!userChoices[current]?.length;
   prevBtn.style.display=current>0?'inline-block':'none';favBtn.classList.toggle('faved',isFav(q.question));
   const multi=q.answer.length>1;
   q.options.forEach(([lab,txt])=>{const label=document.createElement('label');label.className='option';
      const ipt=document.createElement('input');ipt.type=multi?'checkbox':'radio';ipt.name='opt';ipt.value=lab;
-     ipt.onchange=()=>{actionBtn.disabled=false;gradedStatus[current]=false;feedback.textContent='';actionBtn.textContent='提交';};
+     ipt.onchange=()=>{actionBtn.disabled=false;gradedStatus[current]=false;feedback.textContent='';actionBtn.textContent='提交';explainBox.textContent='';explainBtn.style.display='none';}; // Clear explanation on option change
      label.appendChild(ipt);label.append(` ${lab}. ${txt}`);optsArea.appendChild(label);});
   if(userChoices[current]) [...optsArea.querySelectorAll('input')].forEach(i=>i.checked=userChoices[current].includes(i.value));
   if(wasGraded) showFeedback();
   favBtn.onclick=()=>toggleFav(q);
 }
 
-function showFeedback(){const corr=quiz[current].answer.sort().join('');const sel=(userChoices[current]||[]).sort().join('');const ok=sel===corr;feedback.textContent=ok?'✔️ 正确':'✖️ 错误，正确答案: '+corr.split('').join(',');feedback.className='feedback '+(ok?'correct':'incorrect');}
-function submit(){const sel=[...optsArea.querySelectorAll('input')].filter(i=>i.checked).map(i=>i.value).sort();if(!sel.length){alert('先选答案');return;}userChoices[current]=sel;gradedStatus[current]=true;actionBtn.textContent=current<quiz.length-1?'下一题':'完成';showFeedback();}
+function showFeedback(){
+  const corr=quiz[current].answer.sort().join('');
+  const sel=(userChoices[current]||[]).sort().join('');
+  const ok=sel===corr;
+  feedback.textContent=ok?'✔️ 正确':'✖️ 错误，正确答案: '+corr.split('').join(',');
+  feedback.className='feedback '+(ok?'correct':'incorrect');
+  explainBtn.style.display = 'inline-block'; // Show explain button after grading
+}
+
+function submit(){
+  const sel=[...optsArea.querySelectorAll('input')].filter(i=>i.checked).map(i=>i.value).sort();
+  if(!sel.length){alert('先选答案');return;}
+  userChoices[current]=sel;
+  gradedStatus[current]=true;
+  actionBtn.textContent=current<quiz.length-1?'下一题':'完成';
+  showFeedback();
+  // Dispatch a custom event to notify that quiz has been graded
+  document.dispatchEvent(new CustomEvent('quiz-graded'));
+}
+
 actionBtn.onclick=()=>{gradedStatus[current]? (current<quiz.length-1? (current++,renderQuestion()):endQuiz()) : submit();};
 prevBtn.onclick=()=>{current--;renderQuestion();};
-function endQuiz(){const score=quiz.reduce((s,_,i)=>s+((userChoices[i]||[]).sort().join('')===quiz[i].answer.sort().join('')?1:0),0);qNum.textContent='完成！';qText.textContent=`得分 ${score}/${quiz.length}`;optsArea.innerHTML='';actionBtn.style.display='none';prevBtn.style.display='none';favBtn.style.display='none';jumpBtn.style.display='none';feedback.textContent='';}
+function endQuiz(){const score=quiz.reduce((s,_,i)=>s+((userChoices[i]||[]).sort().join('')===quiz[i].answer.sort().join('')?1:0),0);qNum.textContent='完成！';qText.textContent=`得分 ${score}/${quiz.length}`;optsArea.innerHTML='';actionBtn.style.display='none';prevBtn.style.display='none';favBtn.style.display='none';jumpBtn.style.display='none';feedback.textContent='';explainBtn.style.display='none';explainBox.textContent='';} // Hide explain at end
 function startQuiz(text,fromFav){quiz=fromFav?[...favorites]:parseText(text);if(!quiz.length){alert('题库为空或格式错');return;}current=0;userChoices=[];gradedStatus=[];quizBox.style.display='block';jumpBtn.style.display='inline-block';renderQuestion();}
 buildBtn.onclick=()=>startQuiz(rawInput.value.trim(),false);favQuizBtn.onclick=()=>startQuiz('',true);
 
@@ -154,54 +174,32 @@ function renderFav(){favList.innerHTML='';if(!favorites.length){favList.textCont
 jumpBtn.onclick=()=>{renderJump();jumpModal.style.display='block';};
 function renderJump(){jumpGrid.innerHTML='';quiz.forEach((_,i)=>{const b=document.createElement('button');b.textContent=i+1;if(gradedStatus[i])b.classList.add('done');if(i===current)b.classList.add('current');b.onclick=()=>{current=i;renderQuestion();closeModal('jump-modal');};jumpGrid.appendChild(b);});}
 function closeModal(id){$(id).style.display='none';}
-</script>
 
-<!-- DeepSeek Explain Button & Logic -->
-<button id="explainBtn" style="display:none;background:#00897b;color:#fff;padding:6px 14px;border:none;border-radius:4px;margin-top:10px;">生成解析</button>
-<pre id="deepseekExplain" style="white-space:pre-wrap;margin-top:8px;background:#f4f4f4;padding:10px;border-radius:6px;"></pre>
+// DeepSeek 调用
+async function askDeepSeek(prompt){
+  const res = await fetch('/api/explain', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({prompt})
+  });
+  const data = await res.json();
+  return data.explanation || '解析失败';
+}
 
-<script>
-// hook after grading: assume original script triggers a custom event 'quiz-graded'
-document.addEventListener('quiz-graded', () => {
-  document.getElementById('explainBtn').style.display = 'inline-block';
-  document.getElementById('deepseekExplain').textContent = '';
-});
-
-// fallback: if no custom event, show button after clicking main submit button
-setTimeout(()=> {
-  const mainBtn = document.getElementById('action-btn');
-  if(mainBtn){
-    mainBtn.addEventListener('click', () => {
-      // wait a tick for grading status
-      setTimeout(()=>{ 
-        document.getElementById('explainBtn').style.display = 'inline-block';
-        document.getElementById('deepseekExplain').textContent = '';
-      },500);
-    });
-  }
-},1000);
-
-// explainBtn logic
-const explainBtn = document.getElementById('explainBtn');
-explainBtn?.addEventListener('click', async ()=> {
-  const qText = document.getElementById('question-text')?.innerText || '';
-  const opts = Array.from(document.querySelectorAll('#options-area label')).map(l=>l.innerText).join('\n');
+explainBtn.addEventListener('click', async () => {
+  const qText = qText.innerText; // Use the global qText element
+  const opts = Array.from(optsArea.querySelectorAll('label')).map(l=>l.innerText).join('\n'); // Use the global optsArea
   const myAns = (window.userChoices && window.userChoices[window.current]) ? window.userChoices[window.current].join(',') : '';
   const prompt = `题目：${qText}\n选项：\n${opts}\n我选择的答案：${myAns}\n请给出正确答案并简要解析（200字内）。`;
 
-  const box = document.getElementById('deepseekExplain');
-  box.textContent = '⏳ 正在生成解析...';
-
+  explainBox.textContent = '⏳ 解析生成中...';
   try{
-    const res = await fetch('/api/explain',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt})});
-    const data = await res.json();
-    box.textContent = data.explanation || '解析失败';
+    const txt = await askDeepSeek(prompt);
+    explainBox.textContent = txt;
   }catch(e){
-    box.textContent = '调用失败，请稍后重试';
+    explainBox.textContent = '解析失败，请稍后重试';
   }
 });
 </script>
-<!-- End DeepSeek -->
-
 </body>
 </html>
