@@ -177,7 +177,7 @@ function closeModal(id){$(id).style.display='none';}
 
 // DeepSeek 调用
 async function askDeepSeek(prompt){
-  const res = await fetch('/api/explain', {
+    const res = await fetch('https://quiz-ivory-eight-13.vercel.app/api/explain', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({prompt})
