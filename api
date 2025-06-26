@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({error:'Only POST'});
 
-  const { prompt } = await req.body || {};
+  const { prompt } = await req.json();
   if (!prompt) return res.status(400).json({error:'Need prompt'});
 
   const apiKey = process.env.DEEPSEEK_API_KEY;
