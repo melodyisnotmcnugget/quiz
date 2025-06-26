@@ -28,7 +28,7 @@ button[disabled]{background:#999;cursor:not-allowed}
 </style>
 </head>
 <body>
-<h1>Quick Quiz Builder V8 + DeepSeek</h1>
+<h1>Quick Quiz Builder V8 + DeepSeek</h1>
 <p>粘贴题库，数字 <strong>1–8</strong> 快速选项，<strong>Enter</strong> 提交/下一题。</p>
 
 <textarea id="raw-input" placeholder="把题库粘贴到这里…"></textarea><br>
@@ -98,13 +98,13 @@ function updateFavButtons(){const vis=favorites.length?'inline-block':'none';fav
 function parseText(txt){
   const lines=txt.replace(/\r/g,'').split('\n');const out=[];let i=0;
   while(i<lines.length){if(!lines[i].trim()){i++;continue;}
-   const qLine=lines[i++].trim();
-   let opts=[];while(i<lines.length&&!lines[i].startsWith('*')){if(lines[i].trim())opts.push(lines[i].trim());i++;}
-   const ans=i<lines.length?lines[i].trim():'';
-   i++;const joined=opts.join(' ');
-   const parts=joined.split(/\s*(?=[A-HＡ-Ｈ][\.．、])/).filter(Boolean);
-   const options=parts.map(p=>{const m=p.match(/^([A-HＡ-Ｈ])[\.．、]?\s*(.+)$/);return m?[m[1].toUpperCase(),m[2].trim()]:null}).filter(Boolean);
-   out.push({question:qLine.replace(/^\d+\./,''),options,answer:ans.replace(/^\*/,'').replace(/!$/,'').toUpperCase().split('')});
+    const qLine=lines[i++].trim();
+    let opts=[];while(i<lines.length&&!lines[i].startsWith('*')){if(lines[i].trim())opts.push(lines[i].trim());i++;}
+    const ans=i<lines.length?lines[i].trim():'';
+    i++;const joined=opts.join(' ');
+    const parts=joined.split(/\s*(?=[A-HＡ-Ｈ][\.．、])/).filter(Boolean);
+    const options=parts.map(p=>{const m=p.match(/^([A-HＡ-Ｈ])[\.．、]?\s*(.+)$/);return m?[m[1].toUpperCase(),m[2].trim()]:null}).filter(Boolean);
+    out.push({question:qLine.replace(/^\d+\./,''),options,answer:ans.replace(/^\*/,'').replace(/!$/,'').toUpperCase().split('')});
   }return out;
 }
 
@@ -118,9 +118,9 @@ function renderQuestion(){
   prevBtn.style.display=current>0?'inline-block':'none';favBtn.classList.toggle('faved',isFav(q.question));
   const multi=q.answer.length>1;
   q.options.forEach(([lab,txt])=>{const label=document.createElement('label');label.className='option';
-     const ipt=document.createElement('input');ipt.type=multi?'checkbox':'radio';ipt.name='opt';ipt.value=lab;
-     ipt.onchange=()=>{actionBtn.disabled=false;gradedStatus[current]=false;feedback.textContent='';actionBtn.textContent='提交';explainBox.textContent='';explainBtn.style.display='none';}; // Clear explanation on option change
-     label.appendChild(ipt);label.append(` ${lab}. ${txt}`);optsArea.appendChild(label);});
+      const ipt=document.createElement('input');ipt.type=multi?'checkbox':'radio';ipt.name='opt';ipt.value=lab;
+      ipt.onchange=()=>{actionBtn.disabled=false;gradedStatus[current]=false;feedback.textContent='';actionBtn.textContent='提交';explainBox.textContent='';explainBtn.style.display='none';}; // Clear explanation on option change
+      label.appendChild(ipt);label.append(` ${lab}. ${txt}`);optsArea.appendChild(label);});
   if(userChoices[current]) [...optsArea.querySelectorAll('input')].forEach(i=>i.checked=userChoices[current].includes(i.value));
   if(wasGraded) showFeedback();
   favBtn.onclick=()=>toggleFav(q);
@@ -156,10 +156,10 @@ buildBtn.onclick=()=>startQuiz(rawInput.value.trim(),false);favQuizBtn.onclick=(
 document.addEventListener('keydown',e=>{
   if(document.activeElement===rawInput) return;
   if(e.key>='1'&&e.key<='8'){ // map 1->A, 2->B...
-     const idx=parseInt(e.key,10)-1;
-     const letter=String.fromCharCode('A'.charCodeAt(0)+idx);
-     const ipt=optsArea.querySelector(`input[value="${letter}"]`);
-     if(ipt){if(ipt.type==='checkbox') ipt.checked=!ipt.checked; else ipt.checked=true; ipt.dispatchEvent(new Event('change')); }
+      const idx=parseInt(e.key,10)-1;
+      const letter=String.fromCharCode('A'.charCodeAt(0)+idx);
+      const ipt=optsArea.querySelector(`input[value="${letter}"]`);
+      if(ipt){if(ipt.type==='checkbox') ipt.checked=!ipt.checked; else ipt.checked=true; ipt.dispatchEvent(new Event('change')); }
   }else if(e.key==='Enter'){e.preventDefault();actionBtn.click();}
 });
 
@@ -183,21 +183,25 @@ async function askDeepSeek(prompt){
     body:JSON.stringify({prompt})
   });
   const data = await res.json();
+  // 确保这里返回的是您的Vercel API路由返回的“explanation”字段
   return data.explanation || '解析失败';
 }
 
 explainBtn.addEventListener('click', async () => {
-  const qText = qText.innerText; // Use the global qText element
-  const opts = Array.from(optsArea.querySelectorAll('label')).map(l=>l.innerText).join('\n'); // Use the global optsArea
+  // **这里是修改过的地方，直接使用全局声明的 qText 和 optsArea**
+  const questionTextContent = qText.innerText; // 获取问题文本
+  const optionsText = Array.from(optsArea.querySelectorAll('label')).map(l=>l.innerText).join('\n'); // 获取选项文本
+
   const myAns = (window.userChoices && window.userChoices[window.current]) ? window.userChoices[window.current].join(',') : '';
-  const prompt = `题目：${qText}\n选项：\n${opts}\n我选择的答案：${myAns}\n请给出正确答案并简要解析（200字内）。`;
+  const prompt = `题目：${questionTextContent}\n选项：\n${optionsText}\n我选择的答案：${myAns}\n请给出正确答案并简要解析（200字内）。`;
 
   explainBox.textContent = '⏳ 解析生成中...';
-  try{
+  try {
     const txt = await askDeepSeek(prompt);
     explainBox.textContent = txt;
-  }catch(e){
+  } catch (e) {
     explainBox.textContent = '解析失败，请稍后重试';
+    console.error("生成解析时出错:", e); // 在浏览器开发者工具的控制台会显示具体错误
   }
 });
 </script>
