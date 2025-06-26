@@ -1,0 +1,100 @@
+
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>Quick Quiz Builder V8 + DeepSeek</title>
+<style>
+body{font-family:Arial,Helvetica,sans-serif;max-width:900px;margin:0 auto;padding:24px;background:#f7f7f7}
+h1{margin-bottom:12px}
+textarea{width:100%;height:240px;font-family:Consolas,monospace;font-size:14px;padding:8px;border:1px solid #ccc;border-radius:4px}
+button{padding:6px 14px;font-size:15px;margin:5px 4px;border:none;border-radius:4px;cursor:pointer;background:#1976d2;color:#fff}
+button[disabled]{background:#999;cursor:not-allowed}
+#quiz-container{background:#fff;padding:20px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.15);margin-top:20px;display:none;position:relative}
+.option{margin:6px 0;display:block}
+.feedback{margin-top:10px;font-weight:bold}
+.correct{color:#2e7d32}
+.incorrect{color:#c62828}
+#top-btns{position:absolute;top:10px;right:10px;display:flex;gap:6px;z-index:10}
+.top-icon{font-size:18px;background:none;border:none;color:#d32f2f;padding:0 4px;cursor:pointer}
+.top-icon.jump{color:#00897b}
+.top-icon.faved{color:#fdd835}
+.modal{display:none;position:fixed;top:10%;left:50%;transform:translateX(-50%);width:85%;max-width:650px;background:#fff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.3);max-height:80%;overflow:auto;padding:18px}
+.modal h2{margin-top:0}
+.jump-grid{display:flex;flex-wrap:wrap;gap:6px}
+.jump-grid button{width:42px;border-radius:4px;padding:6px 0;background:#607d8b}
+.jump-grid button.done{background:#90caf9;color:#000}
+.jump-grid button.current{border:2px solid #ffeb3b}
+#explainBtn{background:#00897b}
+</style>
+</head>
+<body>
+<h1>Quick Quiz Builder V8 + DeepSeek</h1>
+<p>粘贴题库，数字 <strong>1–8</strong> 快速选项，<strong>Enter</strong> 提交/下一题。</p>
+
+<textarea id="raw-input" placeholder="把题库粘贴到这里…"></textarea><br>
+<button id="build-btn">生成刷题</button>
+<button id="save-btn" style="background:#455a64">保存题库</button>
+<button id="show-bank-btn" style="background:#37474f">题库</button>
+<button id="fav-quiz-btn" style="display:none;background:#388e3c">刷收藏题</button>
+<button id="manage-fav-btn" style="display:none;background:#8e24aa">管理收藏夹</button>
+
+<div id="quiz-container">
+  <div id="top-btns">
+    <button id="jump-btn" class="top-icon jump" title="题号导航">📑</button>
+    <button id="fav-btn" class="top-icon" title="收藏/取消收藏">★</button>
+  </div>
+  <div id="q-num"></div>
+  <p id="question-text" class="question-text"></p>
+  <div id="options-area"></div>
+  <button id="prev-btn" style="display:none;background:#5e35b1">上一题</button>
+  <button id="action-btn" disabled>提交</button>
+  <!-- 解释区 -->
+  <button id="explainBtn" style="display:none;">生成解析</button>
+  <pre id="explainBox"></pre>
+  <p id="feedback" class="feedback"></p>
+</div>
+
+<!-- 其余模态框同上省略，为 brevity -->
+
+<script>
+// ===== 现有JS逻辑（省略，仅示例保留核心变量） =====
+const questionTextEl = document.getElementById('question-text');
+const optionsArea = document.getElementById('options-area');
+const explainBtn = document.getElementById('explainBtn');
+const explainBox = document.getElementById('explainBox');
+
+// 假设有全局变量 current, quiz, userChoices 已由原脚本维护
+// 下面钩到提交后显示按钮
+document.addEventListener('quiz-graded', () => {
+  explainBtn.style.display = 'inline-block';
+});
+
+// DeepSeek 调用
+async function askDeepSeek(prompt){
+  const res = await fetch('/api/explain', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({prompt})
+  });
+  const data = await res.json();
+  return data.explanation || '解析失败';
+}
+
+explainBtn.addEventListener('click', async () => {
+  const qText = questionTextEl.innerText;
+  const opts = Array.from(optionsArea.querySelectorAll('label')).map(l=>l.innerText).join('\n');
+  const myAns = (window.userChoices && window.userChoices[window.current]) ? window.userChoices[window.current].join(',') : '';
+  const prompt = `题目：${qText}\n选项：\n${opts}\n我选择的答案：${myAns}\n请给出正确答案并简要解析（200字内）。`;
+
+  explainBox.textContent = '⏳ 解析生成中...';
+  try{
+    const txt = await askDeepSeek(prompt);
+    explainBox.textContent = txt;
+  }catch(e){
+    explainBox.textContent = '解析失败，请稍后重试';
+  }
+});
+</script>
+</body>
+</html>
