@@ -36,11 +36,13 @@ export default async function handler(req, res) {
       })
     });
 
-    const j = await r.json();
-    res.status(200).json({
-      explanation: j?.choices?.[0]?.message?.content || '解析失败'
-    });
-  } catch (e) {
-    res.status(500).json({ error: 'DeepSeek request failed', detail: e.toString() });
+  const j = await r.json();
+
+  // DEBUG：把 DeepSeek 全部响应带回前端
+  if (!j.choices || !j.choices[0] || !j.choices[0].message) {
+    return res.status(200).json({ explanation: 'DeepSeek error: ' + JSON.stringify(j) });
   }
-}
+
+  res.status(200).json({
+    explanation: j.choices[0].message.content
+  });
