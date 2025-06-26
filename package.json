@@ -1,7 +1,7 @@
 {
   "name": "quiz-app",
-  "version": "1.0.0",   <-- 这里有逗号
-  "private": true,      <-- 这里有逗号
+  "version": "1.0.0",
+  "private": true,
   "scripts": {
     "start": "node api/explain.js"
   }
