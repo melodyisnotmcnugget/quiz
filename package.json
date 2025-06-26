@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "start": "node api/explain.js" // 这是一个占位符，Vercel会自动处理api路由
+    "start": "node api/explain.js"
   }
 }
