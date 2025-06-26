@@ -175,8 +175,6 @@ jumpBtn.onclick=()=>{renderJump();jumpModal.style.display='block';};
 function renderJump(){jumpGrid.innerHTML='';quiz.forEach((_,i)=>{const b=document.createElement('button');b.textContent=i+1;if(gradedStatus[i])b.classList.add('done');if(i===current)b.classList.add('current');b.onclick=()=>{current=i;renderQuestion();closeModal('jump-modal');};jumpGrid.appendChild(b);});}
 function closeModal(id){$(id).style.display='none';}
 
-// ... (之前的代码保持不变) ...
-
 // DeepSeek 调用
 async function askDeepSeek(prompt){
   const res = await fetch('/api/explain', {
@@ -189,29 +187,19 @@ async function askDeepSeek(prompt){
 }
 
 explainBtn.addEventListener('click', async () => {
-  // 获取问题文本内容，使用不同的变量名避免混淆
-  const questionContent = qText.innerText; // qText 是全局定义的 DOM 元素
-  const opts = Array.from(optsArea.querySelectorAll('label')).map(l=>l.innerText).join('\n');
-  const myAns = (window.userChoices && window.userChoices[window.current]) ? window.userChoices[window.current].map(choice => {
-    // 假设您的选项是 A, B, C... 我们想显示完整选项文本
-    const option = quiz[current].options.find(opt => opt[0] === choice);
-    return option ? `${option[0]}. ${option[1]}` : choice;
-  }).join(',') : '未选择'; // 如果没有选择，显示“未选择”
-  
-  // 构造更清晰的 Prompt
-  const prompt = `请解析以下题目：
-题目: ${questionContent}
-选项:
-${opts}
-我的答案: ${myAns}
-请给出正确答案并简要解析（200字内）。`;
+  const qText = qText.innerText; // Use the global qText element
+  const opts = Array.from(optsArea.querySelectorAll('label')).map(l=>l.innerText).join('\n'); // Use the global optsArea
+  const myAns = (window.userChoices && window.userChoices[window.current]) ? window.userChoices[window.current].join(',') : '';
+  const prompt = `题目：${qText}\n选项：\n${opts}\n我选择的答案：${myAns}\n请给出正确答案并简要解析（200字内）。`;
 
   explainBox.textContent = '⏳ 解析生成中...';
   try{
     const txt = await askDeepSeek(prompt);
     explainBox.textContent = txt;
   }catch(e){
-    console.error("解析失败:", e); // 打印错误到控制台
     explainBox.textContent = '解析失败，请稍后重试';
   }
 });
+</script>
+</body>
+</html>
