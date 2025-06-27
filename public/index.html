@@ -1,19 +1,13 @@
+
 <!DOCTYPE html>
 <html lang="zh">
 <head>
 <meta charset="UTF-8">
-<title>Quick Quiz Builder V8 + DeepSeek</title>
+<title>Quick Quiz Builder V8 + DeepSeek (Streaming)</title>
 <style>
-body{font-family:Arial,Helvetica,sans-serif;max-width:900px;margin:0 auto;padding:24px;background:#f7f7f7}
-h1{margin-bottom:12px}
-#explainBox{
-  white-space: pre-wrap;   /* 保留换行，同时允许自动折行 */
-  word-break: break-all;   /* 需要时在任意字母断行，避免长英文撑出容器 */
-  overflow-wrap: anywhere; /* 保险：长单词也能断 */
-  margin-top: 6px;
-}
-
-textarea{width:100%;height:240px;font-family:Consolas,monospace;font-size:14px;padding:8px;border:1px solid #ccc;border-radius:4px}
+body{font-family:Arial,Helvetica,sans-serif;max-width:960px;margin:0 auto;padding:24px;background:#f5f5f5;line-height:1.6}
+h1{margin:0 0 12px}
+textarea{width:100%;height:220px;font-family:Consolas,monospace;font-size:14px;padding:8px;border:1px solid #ccc;border-radius:4px}
 button{padding:6px 14px;font-size:15px;margin:5px 4px;border:none;border-radius:4px;cursor:pointer;background:#1976d2;color:#fff}
 button[disabled]{background:#999;cursor:not-allowed}
 #quiz-container{background:#fff;padding:20px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.15);margin-top:20px;display:none;position:relative}
@@ -21,22 +15,27 @@ button[disabled]{background:#999;cursor:not-allowed}
 .feedback{margin-top:10px;font-weight:bold}
 .correct{color:#2e7d32}
 .incorrect{color:#c62828}
-#top-btns{position:absolute;top:10px;right:10px;display:flex;gap:6px;z-index:10}
+#top-btns{position:absolute;top:10px;right:10px;display:flex;gap:6px}
 .top-icon{font-size:18px;background:none;border:none;color:#d32f2f;padding:0 4px;cursor:pointer}
 .top-icon.jump{color:#00897b}
 .top-icon.faved{color:#fdd835}
-.modal{display:none;position:fixed;top:10%;left:50%;transform:translateX(-50%);width:85%;max-width:650px;background:#fff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.3);max-height:80%;overflow:auto;padding:18px}
+#explainBox{white-space:pre-wrap;word-break:break-all;overflow-wrap:anywhere;margin-top:6px;background:#f9f9f9;padding:8px;border-radius:4px}
+.modal{display:none;position:fixed;top:10%;left:50%;transform:translateX(-50%);width:85%;max-width:650px;background:#fff;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.3);max-height:80%;overflow:auto;padding:18px;z-index:1000}
 .modal h2{margin-top:0}
 .jump-grid{display:flex;flex-wrap:wrap;gap:6px}
 .jump-grid button{width:42px;border-radius:4px;padding:6px 0;background:#607d8b}
 .jump-grid button.done{background:#90caf9;color:#000}
 .jump-grid button.current{border:2px solid #ffeb3b}
-#explainBtn{background:#00897b}
+#chat-panel{position:fixed;right:10px;top:80px;width:320px;height:60vh;background:#fff;border:1px solid #ddd;border-radius:8px;display:none;flex-direction:column;z-index:9999;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+#chat-log{flex:1;overflow:auto;padding:8px;font-size:14px}
+#chat-input{flex:1;border:none;padding:6px 8px;font-size:14px}
+#chat-send{background:#00897b}
+#open-chat{position:fixed;right:10px;top:20px;background:#00897b;border-radius:50%;width:38px;height:38px;font-size:18px;line-height:38px;text-align:center;padding:0}
 </style>
 </head>
 <body>
-<h1>Quick Quiz Builder V8 + DeepSeek</h1>
-<p>粘贴题库，数字 <strong>1–8</strong> 快速选项，<strong>Enter</strong> 提交/下一题。</p>
+<h1>Quick Quiz Builder V8 + DeepSeek (Streaming)</h1>
+<p>粘贴题库，数字 <strong>1–8</strong> 选项，<strong>Enter</strong> 提交/下一题。</p>
 
 <textarea id="raw-input" placeholder="把题库粘贴到这里…"></textarea><br>
 <button id="build-btn">生成刷题</button>
@@ -51,36 +50,33 @@ button[disabled]{background:#999;cursor:not-allowed}
     <button id="fav-btn" class="top-icon" title="收藏/取消收藏">★</button>
   </div>
   <div id="q-num"></div>
-  <p id="question-text" class="question-text"></p>
+  <p id="question-text"></p>
   <div id="options-area"></div>
   <button id="prev-btn" style="display:none;background:#5e35b1">上一题</button>
   <button id="action-btn" disabled>提交</button>
-  <button id="explainBtn" style="display:none;">生成解析</button>
+  <button id="explainBtn" style="display:none;background:#00897b">生成解析</button>
   <pre id="explainBox"></pre>
   <p id="feedback" class="feedback"></p>
 </div>
 
-<div id="fav-manager" class="modal">
-  <h2>收藏夹</h2>
-  <div id="fav-list"></div>
-  <button onclick="closeModal('fav-manager')">关闭</button>
-</div>
+<!-- modals -->
+<div id="fav-manager" class="modal"><h2>收藏夹</h2><div id="fav-list"></div><button onclick="closeModal('fav-manager')">关闭</button></div>
+<div id="jump-modal" class="modal"><h2>跳转到题号</h2><div id="jump-grid" class="jump-grid"></div><button onclick="closeModal('jump-modal')">关闭</button></div>
+<div id="bank-modal" class="modal"><h2>已保存题库</h2><div id="bank-list"></div><button onclick="closeModal('bank-modal')">关闭</button></div>
 
-<div id="jump-modal" class="modal">
-  <h2>跳转到题号</h2>
-  <div id="jump-grid" class="jump-grid"></div>
-  <button onclick="closeModal('jump-modal')">关闭</button>
+<!-- chat panel -->
+<div id="chat-panel">
+  <div id="chat-log"></div>
+  <div style="display:flex;border-top:1px solid #ddd">
+    <input id="chat-input" placeholder="问 DeepSeek…" autocomplete="off">
+    <button id="chat-send">发送</button>
+  </div>
 </div>
-
-<div id="bank-modal" class="modal">
-  <h2>已保存题库</h2>
-  <div id="bank-list"></div>
-  <button onclick="closeModal('bank-modal')">关闭</button>
-</div>
-
-<div style="height:800px;"></div>
+<button id="open-chat">💬</button>
 
 <script>
+document.addEventListener('DOMContentLoaded', ()=>{
+
 const $=id=>document.getElementById(id);
 
 // elements
@@ -91,16 +87,20 @@ const actionBtn=$('action-btn'), prevBtn=$('prev-btn'), feedback=$('feedback'), 
 const favManager=$('fav-manager'), favList=$('fav-list');
 const jumpModal=$('jump-modal'), jumpGrid=$('jump-grid');
 const bankModal=$('bank-modal'), bankList=$('bank-list');
-const explainBtn = document.getElementById('explainBtn');
-const explainBox = document.getElementById('explainBox');
+const explainBtn=$('explainBtn'), explainBox=$('explainBox');
+
+// chat elems
+const chatPanel=$('chat-panel'), chatLog=$('chat-log'), chatInput=$('chat-input'), chatSend=$('chat-send'), openChat=$('open-chat');
 
 // data
 let quiz=[],current=0,userChoices=[],gradedStatus=[];
 let favorites=JSON.parse(localStorage.getItem('favorites')||'[]');
 let quizBank=JSON.parse(localStorage.getItem('quizBank')||'[]');
+const explanationCache={};
 
 const saveStorage=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
-function updateFavButtons(){const vis=favorites.length?'inline-block':'none';favQuizBtn.style.display=vis;manageFavBtn.style.display=vis;}updateFavButtons();
+const updateFavButtons=()=>{const vis=favorites.length?'inline-block':'none';favQuizBtn.style.display=vis;manageFavBtn.style.display=vis;};
+updateFavButtons();
 
 function parseText(txt){
   const lines=txt.replace(/\r/g,'').split('\n');const out=[];let i=0;
@@ -108,28 +108,47 @@ function parseText(txt){
     const qLine=lines[i++].trim();
     let opts=[];while(i<lines.length&&!lines[i].startsWith('*')){if(lines[i].trim())opts.push(lines[i].trim());i++;}
     const ans=i<lines.length?lines[i].trim():'';
-    i++;const joined=opts.join(' ');
-    const parts=joined.split(/\s*(?=[A-HＡ-Ｈ][\.．、])/).filter(Boolean);
+    i++;
+    const parts=opts.join(' ').split(/\s*(?=[A-HＡ-Ｈ][\.．、])/).filter(Boolean);
     const options=parts.map(p=>{const m=p.match(/^([A-HＡ-Ｈ])[\.．、]?\s*(.+)$/);return m?[m[1].toUpperCase(),m[2].trim()]:null}).filter(Boolean);
     out.push({question:qLine.replace(/^\d+\./,''),options,answer:ans.replace(/^\*/,'').replace(/!$/,'').toUpperCase().split('')});
-  }return out;
+  }
+  return out;
 }
 
 function isFav(q){return favorites.some(f=>f.question===q);}
 function toggleFav(q){const idx=favorites.findIndex(f=>f.question===q.question);idx>-1?favorites.splice(idx,1):favorites.push(q);saveStorage('favorites',favorites);updateFavButtons();favBtn.classList.toggle('faved',idx===-1);}
 
 function renderQuestion(){
-  const q=quiz[current];qNum.textContent=`题目 ${current+1}/${quiz.length}`;qText.textContent=q.question;
-  optsArea.innerHTML='';feedback.textContent='';explainBox.textContent='';explainBtn.style.display='none'; // Reset explanation
-  const wasGraded=gradedStatus[current];actionBtn.textContent=wasGraded?'下一题':'提交';actionBtn.disabled=!userChoices[current]?.length;
-  prevBtn.style.display=current>0?'inline-block':'none';favBtn.classList.toggle('faved',isFav(q.question));
+  const q=quiz[current];
+  qNum.textContent=`题目 ${current+1}/${quiz.length}`;
+  qText.textContent=q.question;
+  optsArea.innerHTML='';
+  feedback.textContent='';
+  explainBox.textContent='';
+  explainBtn.style.display='none';
+
   const multi=q.answer.length>1;
-  q.options.forEach(([lab,txt])=>{const label=document.createElement('label');label.className='option';
-      const ipt=document.createElement('input');ipt.type=multi?'checkbox':'radio';ipt.name='opt';ipt.value=lab;
-      ipt.onchange=()=>{actionBtn.disabled=false;gradedStatus[current]=false;feedback.textContent='';actionBtn.textContent='提交';explainBox.textContent='';explainBtn.style.display='none';}; // Clear explanation on option change
-      label.appendChild(ipt);label.append(` ${lab}. ${txt}`);optsArea.appendChild(label);});
-  if(userChoices[current]) [...optsArea.querySelectorAll('input')].forEach(i=>i.checked=userChoices[current].includes(i.value));
+  q.options.forEach(([lab,txt])=>{
+    const label=document.createElement('label');label.className='option';
+    const ipt=document.createElement('input');ipt.type=multi?'checkbox':'radio';ipt.name='opt'+current;ipt.value=lab;
+    ipt.onchange=()=>{actionBtn.disabled=false;gradedStatus[current]=false;feedback.textContent='';actionBtn.textContent='提交';explainBox.textContent='';explainBtn.style.display='none';};
+    label.appendChild(ipt);label.append(` ${lab}. ${txt}`);optsArea.appendChild(label);
+  });
+
+  if(userChoices[current])[...optsArea.querySelectorAll('input')].forEach(i=>i.checked=userChoices[current].includes(i.value));
+  const wasGraded=gradedStatus[current];
+  actionBtn.textContent=wasGraded?'下一题':'提交';
+  actionBtn.disabled=!userChoices[current]?.length;
+  prevBtn.style.display=current>0?'inline-block':'none';
+  favBtn.classList.toggle('faved',isFav(q.question));
+
   if(wasGraded) showFeedback();
+  if(explanationCache[current]){
+    explainBox.textContent=explanationCache[current];
+    explainBtn.style.display='inline-block';
+  }
+
   favBtn.onclick=()=>toggleFav(q);
 }
 
@@ -139,7 +158,7 @@ function showFeedback(){
   const ok=sel===corr;
   feedback.textContent=ok?'✔️ 正确':'✖️ 错误，正确答案: '+corr.split('').join(',');
   feedback.className='feedback '+(ok?'correct':'incorrect');
-  explainBtn.style.display = 'inline-block'; // Show explain button after grading
+  explainBtn.style.display='inline-block';
 }
 
 function submit(){
@@ -149,67 +168,161 @@ function submit(){
   gradedStatus[current]=true;
   actionBtn.textContent=current<quiz.length-1?'下一题':'完成';
   showFeedback();
-  // Dispatch a custom event to notify that quiz has been graded
-  document.dispatchEvent(new CustomEvent('quiz-graded'));
 }
 
 actionBtn.onclick=()=>{gradedStatus[current]? (current<quiz.length-1? (current++,renderQuestion()):endQuiz()) : submit();};
 prevBtn.onclick=()=>{current--;renderQuestion();};
-function endQuiz(){const score=quiz.reduce((s,_,i)=>s+((userChoices[i]||[]).sort().join('')===quiz[i].answer.sort().join('')?1:0),0);qNum.textContent='完成！';qText.textContent=`得分 ${score}/${quiz.length}`;optsArea.innerHTML='';actionBtn.style.display='none';prevBtn.style.display='none';favBtn.style.display='none';jumpBtn.style.display='none';feedback.textContent='';explainBtn.style.display='none';explainBox.textContent='';} // Hide explain at end
-function startQuiz(text,fromFav){quiz=fromFav?[...favorites]:parseText(text);if(!quiz.length){alert('题库为空或格式错');return;}current=0;userChoices=[];gradedStatus=[];quizBox.style.display='block';jumpBtn.style.display='inline-block';renderQuestion();}
-buildBtn.onclick=()=>startQuiz(rawInput.value.trim(),false);favQuizBtn.onclick=()=>startQuiz('',true);
+
+function endQuiz(){
+  const score=quiz.reduce((s,_,i)=>s+((userChoices[i]||[]).sort().join('')===quiz[i].answer.sort().join('')?1:0),0);
+  qNum.textContent='完成！';
+  qText.textContent=`得分 ${score}/${quiz.length}`;
+  optsArea.innerHTML='';actionBtn.style.display='none';prevBtn.style.display='none';favBtn.style.display='none';jumpBtn.style.display='none';
+  feedback.textContent='';explainBtn.style.display='none';explainBox.textContent='';
+}
+
+function startQuiz(text,fromFav){quiz=fromFav?
+    [...favorites]:parseText(text);
+  if(!quiz.length){alert('题库为空或格式错');return;}
+  current=0;userChoices=[];gradedStatus=[];quizBox.style.display='block';jumpBtn.style.display='inline-block';renderQuestion();
+}
+
+buildBtn.onclick=()=>startQuiz(rawInput.value.trim(),false);
+favQuizBtn.onclick=()=>startQuiz('',true);
 
 // keyboard shortcuts
 document.addEventListener('keydown',e=>{
-  if(document.activeElement===rawInput) return;
-  if(e.key>='1'&&e.key<='8'){ // map 1->A, 2->B...
-      const idx=parseInt(e.key,10)-1;
-      const letter=String.fromCharCode('A'.charCodeAt(0)+idx);
-      const ipt=optsArea.querySelector(`input[value="${letter}"]`);
-      if(ipt){if(ipt.type==='checkbox') ipt.checked=!ipt.checked; else ipt.checked=true; ipt.dispatchEvent(new Event('change')); }
+  if(document.activeElement===rawInput || chatInput===document.activeElement) return;
+  if(e.key>='1'&&e.key<='8'){
+    const idx=parseInt(e.key,10)-1;
+    const letter=String.fromCharCode('A'.charCodeAt(0)+idx);
+    const ipt=optsArea.querySelector(`input[value="${letter}"]`);
+    if(ipt){
+      if(ipt.type==='checkbox') ipt.checked=!ipt.checked; else ipt.checked=true;
+      ipt.dispatchEvent(new Event('change'));
+    }
   }else if(e.key==='Enter'){e.preventDefault();actionBtn.click();}
 });
 
 // save bank / show bank
-saveBtn.onclick=()=>{const t=rawInput.value.trim();if(!t){alert('空题库');return;}const n=prompt('题库名称');if(!n)return;quizBank.push({name:n,text:t});saveStorage('quizBank',quizBank);alert('已保存');};
+saveBtn.onclick=()=>{
+  const t=rawInput.value.trim();if(!t){alert('空题库');return;}
+  const n=prompt('题库名称');if(!n)return;
+  quizBank.push({name:n,text:t});saveStorage('quizBank',quizBank);alert('已保存');
+};
 showBankBtn.onclick=()=>{renderBank();bankModal.style.display='block';};
-function renderBank(){bankList.innerHTML='';if(!quizBank.length){bankList.textContent='暂无题库';return;}quizBank.forEach((q,i)=>{const div=document.createElement('div');div.style.borderBottom='1px solid #ccc';div.style.padding='6px 0';div.append(`${q.name} `);const load=document.createElement('button');load.textContent='加载';load.onclick=()=>{rawInput.value=q.text;closeModal('bank-modal');startQuiz(q.text,false);};const del=document.createElement('button');del.textContent='删除';del.style.background='#c62828';del.onclick=()=>{if(confirm('删除?')){quizBank.splice(i,1);saveStorage('quizBank',quizBank);renderBank();}};div.append(load,del);bankList.appendChild(div);});}
+function renderBank(){
+  bankList.innerHTML='';
+  if(!quizBank.length){bankList.textContent='暂无题库';return;}
+  quizBank.forEach((q,i)=>{
+    const div=document.createElement('div');div.style.borderBottom='1px solid #ccc';div.style.padding='6px 0';
+    div.append(`${q.name} `);
+    const load=document.createElement('button');load.textContent='加载';
+    load.onclick=()=>{rawInput.value=q.text;closeModal('bank-modal');startQuiz(q.text,false);};
+    const del=document.createElement('button');del.textContent='删除';del.style.background='#c62828';
+    del.onclick=()=>{if(confirm('删除?')){quizBank.splice(i,1);saveStorage('quizBank',quizBank);renderBank();}};
+    div.append(load,del);bankList.appendChild(div);
+  });
+}
+
 // fav manager
 manageFavBtn.onclick=()=>{renderFav();favManager.style.display='block';};
-function renderFav(){favList.innerHTML='';if(!favorites.length){favList.textContent='暂无收藏';return;}favorites.forEach((q,i)=>{const div=document.createElement('div');div.style.borderBottom='1px solid #ccc';div.style.padding='6px 0';div.append(`${i+1}. ${q.question} `);const del=document.createElement('button');del.textContent='删除';del.style.background='#c62828';del.onclick=()=>{favorites.splice(i,1);saveStorage('favorites',favorites);renderFav();};div.append(del);favList.appendChild(div);});}
+function renderFav(){
+  favList.innerHTML='';
+  if(!favorites.length){favList.textContent='暂无收藏';return;}
+  favorites.forEach((q,i)=>{
+    const div=document.createElement('div');div.style.borderBottom='1px solid #ccc';div.style.padding='6px 0';
+    div.append(`${i+1}. ${q.question} `);
+    const del=document.createElement('button');del.textContent='删除';del.style.background='#c62828';
+    del.onclick=()=>{favorites.splice(i,1);saveStorage('favorites',favorites);renderFav();};
+    div.append(del);favList.appendChild(div);
+  });
+}
+
 // jump grid
 jumpBtn.onclick=()=>{renderJump();jumpModal.style.display='block';};
-function renderJump(){jumpGrid.innerHTML='';quiz.forEach((_,i)=>{const b=document.createElement('button');b.textContent=i+1;if(gradedStatus[i])b.classList.add('done');if(i===current)b.classList.add('current');b.onclick=()=>{current=i;renderQuestion();closeModal('jump-modal');};jumpGrid.appendChild(b);});}
+function renderJump(){
+  jumpGrid.innerHTML='';
+  quiz.forEach((_,i)=>{
+    const b=document.createElement('button');b.textContent=i+1;
+    if(gradedStatus[i])b.classList.add('done');
+    if(i===current)b.classList.add('current');
+    b.onclick=()=>{current=i;renderQuestion();closeModal('jump-modal');};
+    jumpGrid.appendChild(b);
+  });
+}
 function closeModal(id){$(id).style.display='none';}
 
-// DeepSeek 调用
-async function askDeepSeek(prompt){
-    const res = await fetch('https://quiz-ivory-eight-13.vercel.app/api/explain', {
+// DeepSeek streaming
+async function streamExplain(prompt,key){
+  const res=await fetch('https://quiz-ivory-eight-13.vercel.app/api/explain',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({prompt})
   });
-  const data = await res.json();
-  // 确保这里返回的是您的Vercel API路由返回的“explanation”字段
-  return data.explanation || '解析失败';
+  const reader=res.body.getReader();
+  const dec=new TextDecoder('utf-8');
+  let buf='',txt='';
+  while(true){
+    const {value,done}=await reader.read();
+    if(done)break;
+    buf+=dec.decode(value,{stream:true});
+    const parts=buf.split('\n\n');
+    buf=parts.pop();
+    for(const p of parts){
+      if(!p.startsWith('data:'))continue;
+      const d=p.slice(5).trim();
+      if(d==='[DONE]')continue;
+      let delta='';
+      try{delta=JSON.parse(d).choices?.[0]?.delta?.content||'';}catch{}
+      txt+=delta;
+      explainBox.textContent=txt;
+    }
+  }
+  explanationCache[key]=txt;
 }
 
-explainBtn.addEventListener('click', async () => {
-  // **这里是修改过的地方，直接使用全局声明的 qText 和 optsArea**
-  const questionTextContent = qText.innerText; // 获取问题文本
-  const optionsText = Array.from(optsArea.querySelectorAll('label')).map(l=>l.innerText).join('\n'); // 获取选项文本
-
-  const myAns = (window.userChoices && window.userChoices[window.current]) ? window.userChoices[window.current].join(',') : '';
-  const prompt = `题目：${questionTextContent}\n选项：\n${optionsText}\n我选择的答案：${myAns}\n请给出正确答案并简要解析（200字内）。`;
-
-  explainBox.textContent = '⏳ 解析生成中...';
-  try {
-    const txt = await askDeepSeek(prompt);
-    explainBox.textContent = txt;
-  } catch (e) {
-    explainBox.textContent = '解析失败，请稍后重试';
-    console.error("生成解析时出错:", e); // 在浏览器开发者工具的控制台会显示具体错误
+explainBtn.onclick=()=>{
+  if(explanationCache[current]){
+    explainBox.textContent=explanationCache[current];return;
   }
+  explainBox.textContent='⏳ 解析生成中...';
+  const optsText=Array.from(optsArea.querySelectorAll('label')).map(l=>l.innerText).join('\n');
+  const myAns=(userChoices[current]||[]).join(',');
+  const prompt=`题目：${qText.textContent}\n选项：\n${optsText}\n我选择的答案：${myAns}\n请给出正确答案并简要解析（200字内）。`;
+  streamExplain(prompt,current);
+};
+
+// chat
+openChat.onclick=()=>chatPanel.style.display=chatPanel.style.display==='none'?'flex':'none';
+chatSend.onclick=()=>{const v=chatInput.value.trim();if(!v)return;chatInput.value='';chatStream(v);};
+
+chatInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();chatSend.click();}});
+
+async function chatStream(msg){
+  const div=document.createElement('div');
+  div.innerHTML=`<b>你：</b>${msg}<br><b>AI：</b><span class="ai"></span>`;
+  chatLog.appendChild(div);chatLog.scrollTop=chatLog.scrollHeight;
+  const span=div.querySelector('.ai');
+  const res=await fetch('https://quiz-ivory-eight-13.vercel.app/api/explain',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({prompt:msg})
+  });
+  const reader=res.body.getReader();const dec=new TextDecoder('utf-8');let buf='';
+  while(true){
+    const {value,done}=await reader.read();if(done)break;
+    buf+=dec.decode(value,{stream:true});
+    const parts=buf.split('\n\n');buf=parts.pop();
+    for(const p of parts){
+      if(!p.startsWith('data:'))continue;
+      const d=p.slice(5).trim();if(d==='[DONE]')continue;
+      let delta='';try{delta=JSON.parse(d).choices?.[0]?.delta?.content||'';}catch{}
+      span.textContent+=delta;chatLog.scrollTop=chatLog.scrollHeight;
+    }
+  }
+}
+
 });
 </script>
 </body>
